@@ -20,6 +20,7 @@ import torch
 import torch.distributed as dist
 import torch.distributed.checkpoint as dcp
 import torch.nn as nn
+from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
 from torch.distributed.checkpoint.state_dict import (StateDictOptions,
                                                      get_model_state_dict,
                                                      set_model_state_dict)
@@ -461,6 +462,7 @@ class CheckpointManager:
         dcp.load(
             states_to_load,
             checkpoint_id=self._create_checkpoint_id(step),
+            planner=DefaultLoadPlanner(allow_partial_load=True)
         )
         states.update(states_to_load)
         logger.info(
