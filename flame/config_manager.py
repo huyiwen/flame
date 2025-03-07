@@ -175,8 +175,8 @@ class JobConfig:
             "--optimizer.scheduler",
             type=str,
             default="cosine",
-            choices=["wsd", "cosine", "linear"],
-            help="Scheduler to use. Currently supported: wsd, cosine, and linear.",
+            choices=["wsd", "cosine", "linear", "constant"],
+            help="Scheduler to use. Currently supported: wsd, cosine, constant, and linear.",
         )
         self.parser.add_argument(
             "--optimizer.lr", type=float, default=8e-4, help="Learning rate to use"
@@ -229,7 +229,7 @@ class JobConfig:
         self.parser.add_argument(
             "--training.steps",
             type=int,
-            default=10000,
+            default=None,
             help="How many train steps to run",
         )
         self.parser.add_argument(
