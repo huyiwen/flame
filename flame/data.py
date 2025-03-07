@@ -496,13 +496,14 @@ def build_dataloader(
     persistent_workers: bool = False,
     snapshot_every_n_steps: Optional[int] = 1
 ):
-    dataset = OnlineTokenizedIterableDataset(
-        dataset=dataset,
-        tokenizer=tokenizer,
-        seq_len=seq_len,
-        rank=rank,
-        world_size=world_size
-    )
+    if "input_ids" not in dataset.column_names:
+        dataset = OnlineTokenizedIterableDataset(
+            dataset=dataset,
+            tokenizer=tokenizer,
+            seq_len=seq_len,
+            rank=rank,
+            world_size=world_size
+        )
     return DPAwareDataLoader(
         rank=rank,
         dataset=dataset,

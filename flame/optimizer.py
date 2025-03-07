@@ -29,13 +29,16 @@ __all__ = [
 ]
 
 
-def _create_optimizer(
-    parameters: Iterable[nn.Parameter], optimizer_kwargs: Dict[str, Any], name: str
-) -> Optimizer:
+def _create_optimizer(parameters: Iterable[nn.Parameter],
+                      optimizer_kwargs: Dict[str,
+                                             Any], name: str) -> Optimizer:
     if name == "Adam":
         return torch.optim.Adam(parameters, **optimizer_kwargs)
     elif name == "AdamW":
         return torch.optim.AdamW(parameters, **optimizer_kwargs)
+    elif name == "muon":
+        from muon import Muon
+        return Muon(parameters, **optimizer_kwargs)
     else:
         raise NotImplementedError(f"Optimizer {name} not added.")
 
@@ -69,15 +72,15 @@ class OptimizersContainer(Optimizer):
     optimizers: List[Optimizer]
     model_parts: List[nn.Module]
 
-    def __init__(
-        self, model_parts: List[nn.Module], optimizer_kwargs: Dict[str, Any], name: str
-    ) -> None:
+    def __init__(self, model_parts: List[nn.Module],
+                 optimizer_kwargs: Dict[str, Any], name: str) -> None:
         all_params = []
         self.optimizers: List[Optimizer] = []
         self.model_parts = model_parts
         for model in self.model_parts:
             params = [p for p in model.parameters() if p.requires_grad]
-            self.optimizers.append(_create_optimizer(params, optimizer_kwargs, name))
+            self.optimizers.append(
+                _create_optimizer(params, optimizer_kwargs, name))
             all_params.extend(params)
         self._validate_length(len(self.model_parts))
         self._post_init(all_params, optimizer_kwargs)
@@ -120,9 +123,8 @@ class OptimizersContainer(Optimizer):
             self.optimizers
         ), "Must pass one optimizer per model part or per param if using OptimizersInBackwardContainer"
 
-    def _post_init(
-        self, all_params: list[nn.Parameter], optimizer_kwargs: dict[str, Any]
-    ) -> None:
+    def _post_init(self, all_params: list[nn.Parameter],
+                   optimizer_kwargs: dict[str, Any]) -> None:
         # We need to call Optimizer.__init__() to initialize some necessary optimizer
         # functionality such as hooks.
         Optimizer.__init__(self, all_params, optimizer_kwargs)
@@ -137,9 +139,8 @@ class OptimizersInBackwardContainer(OptimizersContainer):
     execute these methods when the gradient is accumulated.
     """
 
-    def __init__(
-        self, model_parts: List[nn.Module], optimizer_kwargs: Dict[str, Any], name: str
-    ) -> None:
+    def __init__(self, model_parts: List[nn.Module],
+                 optimizer_kwargs: Dict[str, Any], name: str) -> None:
         all_params = []
         self.model_parts = model_parts
 
@@ -147,7 +148,8 @@ class OptimizersInBackwardContainer(OptimizersContainer):
         for model in self.model_parts:
             for p in model.parameters():
                 if p.requires_grad:
-                    optim_dict[p] = _create_optimizer([p], optimizer_kwargs, name)
+                    optim_dict[p] = _create_optimizer([p], optimizer_kwargs,
+                                                      name)
                 all_params.append(p)
 
         def optim_hook(param) -> None:
@@ -164,9 +166,7 @@ class OptimizersInBackwardContainer(OptimizersContainer):
         self._validate_length(
             sum(
                 len([param for param in model.parameters()])
-                for model in self.model_parts
-            )
-        )
+                for model in self.model_parts))
         self._post_init(all_params, optimizer_kwargs)
 
     def step(self) -> None:
@@ -176,9 +176,8 @@ class OptimizersInBackwardContainer(OptimizersContainer):
         pass
 
 
-def build_optimizers(
-    model_parts: List[nn.Module], job_config: JobConfig
-) -> OptimizersContainer:
+def build_optimizers(model_parts: List[nn.Module],
+                     job_config: JobConfig) -> OptimizersContainer:
     """Create a OptimizersContainer for the given model parts and job config.
 
     This function creates a ``OptimizersContainer`` for the given model parts.
@@ -214,11 +213,9 @@ def build_optimizers(
         "foreach": not fused,
     }
 
-    return (
-        OptimizersContainer(model_parts, optimizer_kwargs, name)
-        if not optim_in_bwd
-        else OptimizersInBackwardContainer(model_parts, optimizer_kwargs, name)
-    )
+    return (OptimizersContainer(model_parts, optimizer_kwargs, name)
+            if not optim_in_bwd else OptimizersInBackwardContainer(
+                model_parts, optimizer_kwargs, name))
 
 
 class LRSchedulersContainer(Stateful):
@@ -247,12 +244,14 @@ class LRSchedulersContainer(Stateful):
 
     schedulers: List[LRScheduler]
 
-    def __init__(self, optimizers: OptimizersContainer, lr_lambda: Callable) -> None:
-        assert (
-            len(optimizers) > 0
-        ), "Must have at least one optimizer to create LRScheduler"
+    def __init__(self, optimizers: OptimizersContainer,
+                 lr_lambda: Callable) -> None:
+        assert (len(optimizers)
+                > 0), "Must have at least one optimizer to create LRScheduler"
 
-        self.schedulers = [LambdaLR(optimizer, lr_lambda) for optimizer in optimizers]
+        self.schedulers = [
+            LambdaLR(optimizer, lr_lambda) for optimizer in optimizers
+        ]
 
     def __iter__(self) -> LRScheduler:
         return iter(self.schedulers)
@@ -284,11 +283,14 @@ def linear_scheduler_lambda(
     current_step: int,
     num_warmup_steps: int,
     num_training_steps: int,
-    min_lr_ratio: float = 0.1
+    min_lr_ratio: float = 0.1,
 ) -> float:
     if current_step < num_warmup_steps:
         return float(current_step) / float(max(1, num_warmup_steps))
-    ratio = max(0., float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps)))
+    ratio = max(
+        0.,
+        float(num_training_steps - current_step) /
+        float(max(1, num_training_steps - num_warmup_steps)))
     return ratio * (1 - min_lr_ratio) + min_lr_ratio
 
 
@@ -297,25 +299,35 @@ def cosine_scheduler_lambda(
     num_warmup_steps: int,
     num_training_steps: int,
     num_cycles: float = 0.5,
-    min_lr_ratio: float = 0.1
+    min_lr_ratio: float = 0.1,
 ):
     if current_step < num_warmup_steps:
         return float(current_step) / float(max(1, num_warmup_steps))
-    progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
-    factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
+    progress = float(current_step - num_warmup_steps) / float(
+        max(1, num_training_steps - num_warmup_steps))
+    factor = 0.5 * (1.0 +
+                    math.cos(math.pi * float(num_cycles) * 2.0 * progress))
     factor = factor * (1 - min_lr_ratio) + min_lr_ratio
     return max(0, factor)
 
 
-def wsd_scheduler_lambda(
+def constant_scheduler_lambda(
     current_step: int,
     num_warmup_steps: int,
     num_training_steps: int,
-    decay_ratio: float = 0.1,
-    num_cycles: float = 0.5,
-    min_lr_ratio: float = 0.1,
-    decay_type: str = "sqrt"
 ):
+    if current_step < num_warmup_steps:
+        return float(current_step) / float(max(1, num_warmup_steps))
+    return 1.0
+
+
+def wsd_scheduler_lambda(current_step: int,
+                         num_warmup_steps: int,
+                         num_training_steps: int,
+                         decay_ratio: float = 0.1,
+                         num_cycles: float = 0.5,
+                         min_lr_ratio: float = 0.1,
+                         decay_type: str = "sqrt"):
     num_stable_steps = num_training_steps * (1 - decay_ratio)
     num_decay_steps = num_training_steps - num_stable_steps - num_warmup_steps
     if current_step < num_warmup_steps:
@@ -323,25 +335,29 @@ def wsd_scheduler_lambda(
     if current_step < num_warmup_steps + num_stable_steps:
         return 1.0
     if current_step < num_warmup_steps + num_stable_steps + num_decay_steps:
-        progress = float(current_step - num_warmup_steps - num_stable_steps) / float(max(1, num_decay_steps))
+        progress = float(current_step - num_warmup_steps -
+                         num_stable_steps) / float(max(1, num_decay_steps))
         if decay_type == "linear":
             return min_lr_ratio + (1 - min_lr_ratio) * (1 - progress)
         elif decay_type == "exp":
-            return min_lr_ratio ** progress
+            return min_lr_ratio**progress
         elif decay_type == "cosine":
-            return min_lr_ratio + (1 - min_lr_ratio) * (1 + math.cos(math.pi * float(num_cycles) * 2.0 * progress)) * 0.5
+            return min_lr_ratio + (1 - min_lr_ratio) * (1 + math.cos(
+                math.pi * float(num_cycles) * 2.0 * progress)) * 0.5
         elif decay_type == "square":
-            return min_lr_ratio + (1 - min_lr_ratio) * (1 - progress ** 2)
+            return min_lr_ratio + (1 - min_lr_ratio) * (1 - progress**2)
         elif decay_type == "sqrt":
-            return min_lr_ratio + (1 - min_lr_ratio) * (1 - math.sqrt(progress))
+            return min_lr_ratio + (1 - min_lr_ratio) * (1 -
+                                                        math.sqrt(progress))
         else:
-            raise ValueError(f"decay type {decay_type} is not in ['cosine','miror_cosine','linear','exp','square','sqrt']")
+            raise ValueError(
+                f"decay type {decay_type} is not in ['cosine','miror_cosine','linear','exp','square','sqrt']"
+            )
     return min_lr_ratio
 
 
-def build_lr_schedulers(
-    optimizers: OptimizersContainer, job_config: JobConfig
-) -> LRSchedulersContainer:
+def build_lr_schedulers(optimizers: OptimizersContainer,
+                        job_config: JobConfig) -> LRSchedulersContainer:
     """Create a LRSchedulerContainer for the given optimizers and job config.
 
     This function creates a ``LRSchedulersContainer`` for the given optimizers.
@@ -360,26 +376,25 @@ def build_lr_schedulers(
     """
     warmup_steps = int(job_config.training.warmup_steps)
     if job_config.optimizer.scheduler == "linear":
-        lr_lambda = partial(
-            linear_scheduler_lambda,
-            num_warmup_steps=warmup_steps,
-            num_training_steps=job_config.training.steps,
-            min_lr_ratio=job_config.optimizer.min_lr_ratio
-        )
+        lr_lambda = partial(linear_scheduler_lambda,
+                            num_warmup_steps=warmup_steps,
+                            num_training_steps=job_config.training.steps,
+                            min_lr_ratio=job_config.optimizer.min_lr_ratio)
     elif job_config.optimizer.scheduler == "cosine":
-        lr_lambda = partial(
-            cosine_scheduler_lambda,
-            num_warmup_steps=warmup_steps,
-            num_training_steps=job_config.training.steps,
-            min_lr_ratio=job_config.optimizer.min_lr_ratio
-        )
+        lr_lambda = partial(cosine_scheduler_lambda,
+                            num_warmup_steps=warmup_steps,
+                            num_training_steps=job_config.training.steps,
+                            min_lr_ratio=job_config.optimizer.min_lr_ratio)
     elif job_config.optimizer.scheduler == "wsd":
-        lr_lambda = partial(
-            wsd_scheduler_lambda,
-            num_warmup_steps=warmup_steps,
-            num_training_steps=job_config.training.steps,
-            min_lr_ratio=job_config.optimizer.min_lr_ratio
-        )
+        lr_lambda = partial(wsd_scheduler_lambda,
+                            num_warmup_steps=warmup_steps,
+                            num_training_steps=job_config.training.steps,
+                            min_lr_ratio=job_config.optimizer.min_lr_ratio)
+    elif job_config.optimizer.scheduler == "constant":
+        lr_lambda = partial(constant_scheduler_lambda,
+                            num_warmup_steps=warmup_steps,
+                            num_training_steps=job_config.training.steps)
     else:
-        raise ValueError(f"Scheduler {job_config.optimizer.scheduler} not supported")
+        raise ValueError(
+            f"Scheduler {job_config.optimizer.scheduler} not supported")
     return LRSchedulersContainer(optimizers, lr_lambda)
