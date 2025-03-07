@@ -1,82 +1,90 @@
 #!/usr/bin/bash
+cd /data/flame
+set -x
 
-params=""
-if [ $# -ne 0 ]; then
-    params="$*"
+########### CONFIGS ###########
+export BATCH_SIZE=32
+export SEQ_LEN=4096
+export GAS=2
+export LR=0.0004
+export EULERFORMER=false
+export NNODES=${NNODES:-1}
+export EXTRA=".fp8"
+
+MODEL_ARCH="yulanmini-16"
+LOAD_CHECKPOINT=1
+
+path=exp/$MODEL_ARCH/n${NNODES}.batch${BATCH_SIZE}.gas${GAS}.lr${LR}.seqlen${SEQ_LEN}.ef${EULERFORMER}${EXTRA}
+
+export WARMUP_STEPS=1024
+###############################
+
+config_tmpl=${1:-"train.tpl.toml"}
+config_file=${config_tmpl%.tpl.toml}.toml
+if ! command -v envsubst &> /dev/null; then
+  bash /data/install/setup.sh
+fi
+if [[ $MODEL_ARCH == "transformer" ]]; then
+  export CONFIG=/data/flame/configs/transformer_340M.json
+elif [[ $MODEL_ARCH == "yulanmini-16" ]]; then
+  envsubst < /data/metadata/output/miniyulan-2B-final-stage16-nooptim/checkpoint-155587/config.tpl.json > /data/metadata/output/miniyulan-2B-final-stage16-nooptim/checkpoint-155587/config.json
+  export CONFIG=/data/metadata/output/miniyulan-2B-final-stage16-nooptim/checkpoint-155587
+elif [[ $MODEL_ARCH == "yulanmini-16-4a2" ]]; then
+  export CONFIG=/data/metadata/output/miniyulan-2B-final-stage16-nooptim_moe_4A2/checkpoint-155587
+elif [[ $MODEL_ARCH == "yulanmini-pub" ]]; then
+  export CONFIG=/data/metadata/reference-models/YuLan-Mini-Pub
+elif [[ $MODEL_ARCH == "yulanmini-25-4a2" ]]; then
+  export CONFIG=/data/metadata/reference-models/YuLan-Mini-Before-Annealing_moe_4A2
+fi
+envsubst < $config_tmpl > $config_file
+
+# if load_checkpoint is set and directory not exists, create a symlink
+if [[ $LOAD_CHECKPOINT == 1 && ! -d $path/checkpoint/step-0 ]]; then
+  mkdir -p $path/checkpoint
+  if [[ $MODEL_ARCH == "yulanmini-16" ]]; then
+    ln -s /data/metadata/output/miniyulan-2B-final-stage16-tt/step-0 $path/checkpoint
+  elif [[ $MODEL_ARCH == "yulanmini-pub" ]]; then
+    ln -s /data/metadata/output/YuLan-Mini-Pub-tt/step-0 $path/checkpoint
+  elif [[ $MODEL_ARCH == "yulanmini-16-4a2" ]]; then
+    ln -s /data/metadata/output/miniyulan-16-4A2/step-0 $path/checkpoint
+  elif [[ $MODEL_ARCH == "yulanmini-25-4a2" ]]; then
+    ln -s /data/metadata/output/miniyulan-25-4a2-tt/step-0 $path/checkpoint
+  fi
 fi
 
-# use envs as local params for convenience
-# e.g.
-# NNODE=1 NGPU=8 LOG_RANK=0 ./train.sh
+
+########### TRAINING ##########
 NNODE=${NNODE:-"1"}
 NGPU=${NGPU:-"8"}
 LOG_RANK=${LOG_RANK:-0}
+RANK=${RANK:-0}
 
-if [[ -z "${MASTER_ADDR}" ]]; then
+if [[ -z "${MASTER_ADDR}" ]]    ; then
   export MASTER_ADDR="localhost"
 fi
 if [[ -z "${MASTER_PORT}" ]]; then
   export MASTER_PORT="0"
 fi
 
-: '
-Usage:
-
-bash train.sh -h
-
-Training a 340M model:
-
-NNODE=1 NGPU=8 LOG_RANK=0 bash train.sh \
-  --job.config_file train.toml \
-  --job.dump_folder exp/transformer-340M-10B/batch32.seqlen2048.warmup1024.update1.steps20480.lr3e-4 \
-  --model.config configs/transformer_340M.json \
-  --model.tokenizer_path fla-hub/transformer-1.3B-100B \
-  --optimizer.name AdamW \
-  --optimizer.eps 1e-15 \
-  --optimizer.fused \
-  --optimizer.lr 3e-4 \
-  --optimizer.min_lr_ratio 0.1 \
-  --optimizer.scheduler cosine \
-  --training.batch_size 32 \
-  --training.seq_len 2048 \
-  --training.warmup_steps 1024 \
-  --training.gradient_accumulation_steps 1 \
-  --training.steps 20480 \
-  --training.max_norm 1.0 \
-  --training.skip_nan_inf \
-  --training.dataset HuggingFaceFW/fineweb-edu \
-  --training.dataset_name default \
-  --training.dataset_split train \
-  --training.streaming \
-  --training.num_workers 32 \
-  --training.prefetch_factor 2 \
-  --training.seed 42 \
-  --training.compile \
-  --training.tensor_parallel_degree 1 \
-  --training.disable_loss_parallel \
-  --checkpoint.interval 2048 \
-  --checkpoint.load_step -1 \
-  --metrics.log_freq 1
-'
-
 echo "Launching training..."
 
-set -x
-path=$(grep -oP '(?<=--job.dump_folder )[^ ]+' <<< "$params")
-mkdir -p $path
-cp * $path
-cp -r configs $path
-cp -r flame   $path
-cp -r 3rdparty/flash-linear-attention/fla $path
-cp -r 3rdparty/torchtitan/torchtitan $path
 
-# for offline systems
-# export TRANSFORMERS_OFFLINE=1
-# export HF_DATASETS_OFFLINE=1
-# export HF_HUB_OFFLINE=1
-if [ "$date" == "" ]; then
+########### LOGGING ###########
+if [ "$JOB_ID" == "" ]; then
   date=$(date +%Y%m%d%H%M)
+else
+  date=$JOB_ID
 fi
+
+mkdir -p $path/artifacts-$date
+# cp -r * $path
+cp -r configs      $path/artifacts-$date
+cp -r flame        $path/artifacts-$date
+cp -r train.py     $path/artifacts-$date
+cp -r $config_file $path/artifacts-$date
+cp -r $config_tmpl $path/artifacts-$date
+cp -r $0           $path/artifacts-$date
+
 export WANDB_RESUME=allow
 if [[ -z "${WANDB_PROJECT}" ]]; then
   export WANDB_PROJECT="fla"
@@ -88,15 +96,29 @@ if [[ -z "${WANDB_RUN_ID}" ]]; then
   export WANDB_RUN_ID="$WANDB_NAME-$date"
 fi
 
-PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True" \
-torchrun --nnodes=${NNODE} \
-  --nproc_per_node=${NGPU} \
-  --rdzv_backend c10d \
-  --rdzv_endpoint "${MASTER_ADDR}:${MASTER_PORT}" \
-  --local-ranks-filter ${LOG_RANK} \
-  --role rank \
-  --tee 3 \
-  train.py \
-  $params
+######### ENVIRONMENT #########
+export OMP_NUM_THREADS=4
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+# export TRANSFORMERS_OFFLINE=1
+# export HF_DATASETS_OFFLINE=1
+# export HF_HUB_OFFLINE=1
+# export TORCHDYNAMO_VERBOSE=1
+export HF_ENDPOINT="https://hf-mirror.com"
+
+source /data/flame/.venv/bin/activate
+###############################
+
+if [[ $NNODES -gt 1 ]]; then
+    distributed_args="--nproc_per_node $NGPU --nnodes $NNODES --node_rank $RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT --max_restarts 0 --rdzv_backend static"
+else
+    distributed_args="--nproc_per_node $NGPU --standalone"
+fi
+
+torchrun $distributed_args train.py \
+  --job.config_file $config_file --job.dump_folder $path |& tee ${path}/artifacts-${date}/train-${RANK}.log
 
 echo "RUNNING DONE!"
+error=$(tail -100 ${path}/artifacts-${date}/train-${RANK}.log | grep Error | grep -v ChildFailedError | grep -v thread | tail -1)
+curl -H "Content-Type: application/json" -X POST https://wxpusher.zjiecode.com/api/send/message --data "{\"appToken\": \"AT_6x1rUKLWJsd3DGyvm7NNxpI3GNr7bEN5\", \"content\": \"[$RANK/$NNODES $JOB_ID] $JOB_UNIQUE_NAME $error\", \"topicIds\": [37328]}"
+first_word=$(echo $error | sed 's/\[rank.\]: //g' | awk '{print $1}')
+echo $error > ${path}/artifacts-${date}/error-${RANK}-${first_word%:}.log
