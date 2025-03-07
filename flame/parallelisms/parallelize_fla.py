@@ -168,7 +168,7 @@ def _apply_ac_to_block(module: nn.Module, ac_config):
 
     assert ac_config.mode == "selective", f"{ac_config.mode}"
     use_op_sac = ac_config.selective_ac_option == "op"
-    use_layer_sac = ac_config.selective_ac_option.isdigit()
+    use_layer_sac = ac_config.selective_ac_option.isdigit() or '/' in ac_config.selective_ac_option
     if not use_op_sac and not use_layer_sac:
         raise ValueError(
             f"Invalid selective AC option: {ac_config.selective_ac_option}. "
@@ -206,11 +206,15 @@ def _apply_ac_to_block(module: nn.Module, ac_config):
             preserve_rng_state=False,
         )
     elif use_layer_sac:
-        # Checkpoint every `ac_freq` of the modules passed to this function
-        ac_freq = int(ac_config.selective_ac_option)
+        if '/' in ac_config.selective_ac_option:
+            layer_freq, ac_freq = map(int, ac_config.selective_ac_option.split('/'))
+        else:
+            # Checkpoint every `ac_freq` of the modules passed to this function
+            layer_freq = 1
+            ac_freq = int(ac_config.selective_ac_option)
         ptd_checkpoint_wrapper.__dict__.setdefault("_count", 0)
         ptd_checkpoint_wrapper._count += 1
-        if not ac_freq or ptd_checkpoint_wrapper._count % ac_freq == 0:
+        if not ac_freq or ptd_checkpoint_wrapper._count % ac_freq < layer_freq:
             return ptd_checkpoint_wrapper(module, preserve_rng_state=False)
         else:
             return module
@@ -247,8 +251,13 @@ def apply_compile(model: nn.Module):
 
     base_model_prefix = getattr(model, "base_model_prefix", "model")
     logger.info("Compiling the embedding, norm, and lm_head layers with torch.compile")
-    embeddings = torch.compile(getattr(model, base_model_prefix).embeddings, fullgraph=True)
-    getattr(model, base_model_prefix).register_module("embeddings", embeddings)
+    base_model = getattr(model, base_model_prefix)
+    if hasattr(base_model, "embeddings"):
+        embeddings = torch.compile(base_model.embeddings, fullgraph=True)
+        base_model.register_module("embeddings", embeddings)
+    elif hasattr(base_model, "embed_tokens"):
+        embed_tokens = torch.compile(base_model.embed_tokens, fullgraph=True)
+        base_model.register_module("embed_tokens", embed_tokens)
     norm = torch.compile(getattr(model, base_model_prefix).norm, fullgraph=True)
     getattr(model, base_model_prefix).register_module("norm", norm)
     model.register_module("lm_head", torch.compile(model.lm_head, fullgraph=True))
