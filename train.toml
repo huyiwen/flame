@@ -1,30 +1,28 @@
 [model]
-# config = "/data/metadata/output/miniyulan-2B-final-stage16-nooptim/checkpoint-155587"
-# config = "/data/flame/configs/transformer_340M.json"
-config = "/data/metadata/output/miniyulan-2B-final-stage16-nooptim/checkpoint-155587"
-tokenizer_path = "/data/metadata/output/miniyulan-2B-final-stage16-nooptim/checkpoint-155587"
-converters = "float8"  #  swap nn.Linear with Float8Linear to perform float8 matmul.
+config = "configs/transformer_340M.json"
+tokenizer_path = "fla-hub/transformer-1.3B-100B"
 
 [job]
+dump_folder = "exp"
 print_args = true
 
 [training]
 batch_size = 32
-seq_len = 4096
-context_len = 4096
+seq_len = 2048
+context_len = 2048
 warmup_steps = 1024
-gradient_accumulation_steps = 2
-# steps = 
+gradient_accumulation_steps = 1
+steps = 20480
 max_norm = 1.0
 skip_nan_inf = true
 data_parallel_replicate_degree = 1
 data_parallel_shard_degree = -1
 tensor_parallel_degree = 1
-compile = true
-dataset = "/data/hf_dataset/myl_new_no_math/17_20241108_004951"
+compile = false
+dataset = "HuggingFaceFW/fineweb-edu"
 dataset_name = "default"
 num_workers = 32
-pin_memory = true
+pin_memory = false
 persistent_workers = false
 prefetch_factor = 2
 seed = 42
@@ -33,41 +31,35 @@ varlen = false
 [optimizer]
 name = "AdamW"
 eps = 1e-15
-fused = true
-lr = 0.0004
+lr = 3e-4
 min_lr_ratio = 0.1
-scheduler = 'constant'
-early_step_in_backward = true
+scheduler = 'wsd'
 
 [checkpoint]
 enable_checkpoint = true
 folder = "checkpoint"
 interval_type = "steps"
-interval = 1024
+interval = 2048
 model_weights_only = false
-export_dtype = "bfloat16"
-async_mode = "async"    # ["disabled", "async", "async_with_pinned_mem"]
-load_step = -1
+export_dtype = "float32"
+async_mode = "disabled"    # ["disabled", "async", "async_with_pinned_mem"]
 
 [profiling]
-enable_profiling = false
+enable_profiling = true
 save_traces_folder = "profile_trace"
-profile_freq = 32
+profile_freq = 512
 
 [metrics]
-log_freq = 1
+log_freq = 32
 enable_wandb = true
 
 [experimental]
 context_parallel_degree = 1
 pipeline_parallel_degree = 1
-enable_compiled_autograd = false
 
 [float8]
-enable_fsdp_float8_all_gather = true  # cast Float8Linear.weight from high precision to float8 before FSDP all-gather so we can communicate in float8 to save bandwidth.
-precompute_float8_dynamic_scale_for_fsdp = true  # communicate AMAX/scales efficiently in a single all-reduce for all parameters instead of doing many small all-reduce for each parameter.
-force_recompute_fp8_weight_in_bwd = true  # force recomputation of fp8 weights during backward pass, preventing unsharded fp8 weights from being saved for backward.
+enable_fsdp_float8_all_gather = false
+precompute_float8_dynamic_scale_for_fsdp = false
 
 [activation_checkpoint]
-mode = "full"  # ['none', 'full', 'selective']
-# selective_ac_option = "54/56"
+mode = "none"

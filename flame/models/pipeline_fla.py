@@ -19,11 +19,11 @@ from torch.distributed.pipelining.schedules import (ScheduleZBVZeroBubble,
 from transformers import PretrainedConfig
 
 from torchtitan.config_manager import JobConfig
-from torchtitan.logging import logger
-from torchtitan.parallelisms import ParallelDims
-from torchtitan.parallelisms.pipeline import (build_pipeline_schedule,
-                                              generate_split_points,
-                                              stage_ids_this_rank)
+from torchtitan.distributed.parallel_dims import ParallelDims
+from torchtitan.distributed.pipeline import (build_pipeline_schedule,
+                                             generate_split_points,
+                                             stage_ids_this_rank)
+from torchtitan.tools.logging import logger
 
 DeviceType = Union[int, str, torch.device]
 
@@ -76,7 +76,9 @@ def pipeline_fla_manual_split(
 
     splits = (
         job_config.experimental.pipeline_parallel_split_points
-        or generate_split_points(job_config, parallel_dims.pp, model_config.num_hidden_layers)
+        or generate_split_points(
+            job_config, parallel_dims.pp, model_config.num_hidden_layers
+        )
     )
 
     def _build_stage(

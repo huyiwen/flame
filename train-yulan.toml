@@ -1,20 +1,20 @@
 [model]
 # config = "/data/metadata/output/miniyulan-2B-final-stage16-nooptim/checkpoint-155587"
 # config = "/data/flame/configs/transformer_340M.json"
-config = "${CONFIG}"
+config = "/data/metadata/output/miniyulan-2B-final-stage16-nooptim/checkpoint-155587"
 tokenizer_path = "/data/metadata/output/miniyulan-2B-final-stage16-nooptim/checkpoint-155587"
-converters = "float8"  #  swap nn.Linear with Float8Linear to perform float8 matmul.
+# converters = "float8"  #  swap nn.Linear with Float8Linear to perform float8 matmul.
 
 [job]
 print_args = true
 
 [training]
-batch_size = ${BATCH_SIZE}
-seq_len = ${SEQ_LEN}
-context_len = ${SEQ_LEN}
-warmup_steps = ${WARMUP_STEPS}
-gradient_accumulation_steps = ${GAS}
-# steps = ${STEPS}
+batch_size = 32
+seq_len = 4096
+context_len = 4096
+warmup_steps = 1024
+gradient_accumulation_steps = 2
+# steps = 
 max_norm = 1.0
 skip_nan_inf = true
 data_parallel_replicate_degree = 1
@@ -34,7 +34,7 @@ varlen = false
 name = "AdamW"
 eps = 1e-15
 fused = true
-lr = ${LR}
+lr = 0.0004
 min_lr_ratio = 0.1
 scheduler = 'constant'
 early_step_in_backward = true
