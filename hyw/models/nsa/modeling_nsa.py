@@ -36,6 +36,9 @@ class NSABlock(nn.Module):
 
         self.config = config
         self.layer_idx = layer_idx
+        self.scale_non_residual = config.scale_non_residual
+        if self.scale_non_residual is None:
+            self.scale_non_residual = 1
 
         self.attn_norm = (RMSNorm if config.fuse_norm else nn.RMSNorm)(config.hidden_size, eps=config.norm_eps)
         self.attn = NativeSparseAttention(
@@ -79,13 +82,13 @@ class NSABlock(nn.Module):
             **kwargs
         )
         if self.config.fuse_norm:
-            hidden_states, residual = self.mlp_norm(hidden_states, residual, True)
+            hidden_states, residual = self.mlp_norm(hidden_states * self.scale_non_residual, residual, True)
         else:
-            hidden_states = residual + hidden_states
+            hidden_states = residual + hidden_states * self.scale_non_residual
             residual = hidden_states
             hidden_states = self.mlp_norm(hidden_states)
         hidden_states = self.mlp(hidden_states, **kwargs)
-        hidden_states = residual + hidden_states
+        hidden_states = residual + hidden_states * self.scale_non_residual
 
         outputs = (hidden_states, attentions, past_key_values)
 

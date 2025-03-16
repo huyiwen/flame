@@ -38,6 +38,7 @@ class NSAConfig(PretrainedConfig):
         fuse_swiglu: bool = True,
         fuse_cross_entropy: bool = True,
         vocab_size: int = 32000,
+        scale_non_residual: Optional[float] = None,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -65,6 +66,8 @@ class NSAConfig(PretrainedConfig):
         self.fuse_swiglu = fuse_swiglu
         self.fuse_cross_entropy = fuse_cross_entropy
         self.vocab_size = vocab_size
+
+        self.scale_non_residual = scale_non_residual
 
         super().__init__(
             pad_token_id=pad_token_id,
