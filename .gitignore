@@ -6,6 +6,8 @@ data
 
 # bash scripts
 *.sh
+job_id
+train-yulan.toml
 
 # docs
 docs/_build

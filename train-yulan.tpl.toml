@@ -20,7 +20,7 @@ skip_nan_inf = true
 data_parallel_replicate_degree = 1
 data_parallel_shard_degree = -1
 tensor_parallel_degree = 1
-compile = true
+compile = false
 dataset = "/data/hf_dataset/myl_new_no_math/17_20241108_004951"
 dataset_name = "default"
 num_workers = 32
@@ -43,11 +43,11 @@ early_step_in_backward = true
 enable_checkpoint = true
 folder = "checkpoint"
 interval_type = "steps"
-interval = 1024
+interval = 256
 model_weights_only = false
 export_dtype = "bfloat16"
 async_mode = "async"    # ["disabled", "async", "async_with_pinned_mem"]
-load_step = -1
+load_step = ${LOAD_STEP}
 
 [profiling]
 enable_profiling = false
@@ -62,6 +62,7 @@ enable_wandb = true
 context_parallel_degree = 1
 pipeline_parallel_degree = 1
 enable_compiled_autograd = false
+expert_parallel_degree = 4
 
 [float8]
 enable_fsdp_float8_all_gather = true  # cast Float8Linear.weight from high precision to float8 before FSDP all-gather so we can communicate in float8 to save bandwidth.

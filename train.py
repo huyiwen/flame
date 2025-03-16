@@ -17,14 +17,13 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 import fla  # noqa
 from fla.modules.fused_linear_cross_entropy import FusedLinearCrossEntropyLoss
-from flame.components.checkpoint import TrainState
+from flame.components.checkpoint import CheckpointManager, TrainState
 from flame.components.optimizer import build_lr_schedulers
 from flame.config_manager import JobConfig
 from flame.data import build_dataloader, shuffle
 from flame.models.parallelize_fla import parallelize_fla
 from flame.models.pipeline_fla import pipeline_fla
 from flame.tools.utils import get_num_flop_per_token
-from torchtitan.components.checkpoint import CheckpointManager
 from torchtitan.components.ft import FTParallelDims, init_ft_manager
 from torchtitan.components.loss import cross_entropy_loss
 from torchtitan.components.optimizer import build_optimizers
@@ -254,6 +253,50 @@ def flame_load_dataset(job_config: JobConfig, dp_degree: int):
     return dataset
 
 
+# hardcoded BF16 type peak flops for NVIDIA A100, H100, H200 GPU and AMD MI250, MI300X and AMD MI325X
+def get_peak_flops(device_name: str) -> int:
+    try:
+        import subprocess
+
+        # Run the lspci command and capture the output
+        result = subprocess.run(["lspci"], stdout=subprocess.PIPE, text=True)
+        # Filter the output for lines containing both "NVIDIA" and "H100"
+        filtered_lines = [
+            line
+            for line in result.stdout.splitlines()
+            if "NVIDIA" in line and "H100" in line
+        ]
+        # Join all filtered lines into a single string
+        device_name = " ".join(filtered_lines) or device_name
+    except FileNotFoundError as e:
+        logger.warning(f"Error running lspci: {e}, fallback to use device_name")
+    if "A100" in device_name:
+        # data from https://www.nvidia.com/en-us/data-center/a100/
+        return 312e12
+    elif "H100" in device_name or "H800" in device_name:
+        # data from https://www.nvidia.com/en-us/data-center/h100/
+        # NOTE: Specifications are one-half lower without sparsity.
+        if "NVL" in device_name:
+            return 835e12
+        elif "PCIe" in device_name:
+            return 756e12
+        else:  # for H100 SXM and other variants
+            return 989e12
+    elif "H200" in device_name:
+        # data from https://www.nvidia.com/en-us/data-center/h200/
+        return 989e12
+    elif "MI300X" in device_name or "MI325X" in device_name:
+        # MI300X data from https://www.amd.com/en/products/accelerators/instinct/mi300/mi300x.html
+        # MI325X data from https://www.amd.com/en/products/accelerators/instinct/mi300/mi325x.html
+        return 1300e12
+    elif "MI250X" in device_name:
+        # data from https://www.amd.com/en/products/accelerators/instinct/mi200/mi250x.html (per GCD)
+        return 191.5e12
+    else:  # for other GPU types, assume A100
+        logger.warning(f"Peak flops undefined for: {device_name}, fallback to A100")
+        return 312e12
+
+
 # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
 @record
 def main(job_config: JobConfig):
@@ -291,6 +334,7 @@ def main(job_config: JobConfig):
             cp=job_config.experimental.context_parallel_degree,
             tp=job_config.training.tensor_parallel_degree,
             pp=job_config.experimental.pipeline_parallel_degree,
+            ep=job_config.experimental.expert_parallel_degree,
             world_size=world_size,
             enable_loss_parallel=not job_config.training.disable_loss_parallel,
         )
@@ -308,7 +352,7 @@ def main(job_config: JobConfig):
     dist_utils.init_distributed(job_config)
     # initialize device memory monitor and get peak flops for MFU calculation
     device_memory_monitor = build_device_memory_monitor()
-    gpu_peak_flops = utils.get_peak_flops(device_memory_monitor.device_name)
+    gpu_peak_flops = get_peak_flops(device_memory_monitor.device_name)
     logger.info(f"Peak FLOPS used for computing MFU: {gpu_peak_flops:.3e}")
 
     # build meshes
@@ -359,9 +403,12 @@ def main(job_config: JobConfig):
     )
 
     logger.info(f"Loading model config from {job_config.model.config}")
-    model_config = AutoConfig.from_pretrained(job_config.model.config,
+    model_config: PretrainedConfig = AutoConfig.from_pretrained(job_config.model.config,
                                               trust_remote_code=True)
     model_config.use_cache = False
+    if parallel_dims.ep > 1:
+        assert parallel_dims.cp == 1
+    model_config.ep = parallel_dims.ep
     # set the model configs from training inputs:
     # 1. norm type to decide which norm layer to use
     # 2. disable fused norm if TP is enabled
@@ -499,6 +546,11 @@ def main(job_config: JobConfig):
 
     checkpoint.load(step=job_config.checkpoint.load_step)
     metric_logger = build_metric_logger(job_config, parallel_dims)
+    if hasattr(metric_logger, "wandb"):
+        wandb_config = job_config.to_dict()
+        for key, value in model_config.to_dict().items():
+            wandb_config[f"model_config.{key}"] = value
+        metric_logger.wandb.config.update(wandb_config)
 
     # plot losses loaded from checkpoint (if any) to TensorBoard
     # NOTE: Loss info after the last log step before checkpoint saving will not be ploted.
@@ -544,24 +596,24 @@ def main(job_config: JobConfig):
     )
     logger.info(
         f"{color.green}  Global batch size (w. parallel, distributed & accumulation) = {global_batch_size:,}"
-        f" ({num_tokens_per_step // 1e6:,}M tokens)")
+        f" ({num_tokens_per_step / 1e6:.2f}M tokens)")
     logger.info(
         f"{color.green}  Total optimization steps = {job_config.training.steps:,} "
-        f"({job_config.training.steps * num_tokens_per_step // 1e9:,}B tokens)"
+        f"({job_config.training.steps * num_tokens_per_step / 1e9:.2f}B tokens)"
     )
     logger.info(
         f"{color.green}  Warmup steps = {job_config.training.warmup_steps:,}"
-        f" ({job_config.training.warmup_steps * num_tokens_per_step // 1e9:,}B tokens)"
+        f" ({job_config.training.warmup_steps * num_tokens_per_step / 1e9:.2f}B tokens)"
     )
     logger.info(
-        f"{color.green}  Number of parameters = {model_param_count:,} {color.reset}"
+        f"{color.green}  Number of parameters = {model_param_count / 1e9:.2f}B {color.reset}"
     )
 
     def optimizers_step():
         optimizers.step()
         lr_schedulers.step()
 
-    if True:
+    if False:
         optimizers_step = torch.compile(optimizers_step)
 
     with maybe_enable_profiling(
@@ -575,6 +627,8 @@ def main(job_config: JobConfig):
             optimizers.zero_grad()
 
             losses = []
+            aux_loss = []
+            max_vio = []
             # do gradient accumulation if enabled
             for _ in range(job_config.training.gradient_accumulation_steps):
                 # get batch
@@ -651,8 +705,14 @@ def main(job_config: JobConfig):
                         )
                         loss = output.loss / job_config.training.gradient_accumulation_steps
                         loss.backward()
+                        if hasattr(output, "aux_loss"):
+                            aux_loss.append(output.aux_loss)
+                        if hasattr(output, "max_vio"):
+                            max_vio.append(output.max_vio)
                 losses.append(loss)
             loss = sum(losses)
+            aux_loss = sum(aux_loss) if aux_loss else None
+            max_vio = sum(max_vio) / len(max_vio) if max_vio else None
 
             # clip gradients
             grad_norm = dist_utils.clip_grad_norm_(
@@ -759,13 +819,17 @@ def main(job_config: JobConfig):
                     device_mem_stats.num_alloc_retries,
                     "memory/num_ooms": device_mem_stats.num_ooms,
                 }
+                if aux_loss is not None:
+                    metrics["moe/aux_loss"] = aux_loss
+                if max_vio is not None:
+                    metrics["moe/max_vio"] = max_vio
                 metric_logger.log(metrics, step=train_state.step)
 
                 # tgs: {round(tgs):7,}
                 logger.info(
-                    f"{color.cyan}step: {train_state.step:>8,} token: {train_state.token:>15,}  "
-                    f"{color.green}loss: {global_avg_loss:7.4f}  "
-                    f"{color.blue}lr: {last_lr:.4e} gnorm: {grad_norm:5.2f} "
+                    f"{color.cyan}step: {train_state.step:>8,} token: {train_state.token // 1e6 / 1e3:>7,}B  "
+                    f"{color.green}loss: {global_avg_loss:7.4f}  max_vio: {max_vio:7.4f}  "
+                    f"{color.blue}lr: {last_lr:.4e} gnorm: {grad_norm:5.3f} "
                     f"{color.yellow}memory: {device_mem_stats.max_reserved_gib:5.2f}GiB "
                     f"{color.red}mfu: {mfu:6.2%} "
                     f"{color.magenta}[{str(train_state.elapsed).split('.')[0]:>8}<{str(eta).split('.')[0]:>8}]{color.reset}"
@@ -808,10 +872,4 @@ if __name__ == "__main__":
         logger.setLevel("WARNING")
     config = JobConfig()
     config.parse_args()
-    try:
-        main(config)
-    except (KeyboardInterrupt, Exception):
-        import traceback
-        print(traceback.format_exc())
-        torch.distributed.destroy_process_group()
-        sys.exit(0)
+    main(config)
