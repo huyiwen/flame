@@ -563,6 +563,7 @@ def main(job_config: JobConfig):
     metric_logger = _build_metric_logger(job_config, parallel_dims)
     if hasattr(metric_logger, "wandb"):
         wandb_config = job_config.to_dict()
+        wandb_config["JOB_ID"] = os.environ.get("JOB_ID", "/")
         for key, value in model_config.to_dict().items():
             wandb_config[f"model_config.{key}"] = value
         metric_logger.wandb.config.update(wandb_config)
