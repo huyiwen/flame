@@ -262,6 +262,7 @@ class CheckpointManager:
         self.enable_checkpoint = ckpt_config.enable_checkpoint
         self.ft_manager = ft_manager.manager if ft_manager.enabled else None
         self.mp = None
+        self.purge_thread = None
 
         if self.ft_manager:
             optimizers.init_cache_state_dict()
@@ -329,8 +330,6 @@ class CheckpointManager:
                 target=purge_thread, args=(self.purge_queue,)
             )
             self.purge_thread.start()
-        else:
-            self.purge_thread = None
 
         self.model_weights_only = ckpt_config.model_weights_only
         self.export_dtype = TORCH_DTYPE_MAP[ckpt_config.export_dtype]
