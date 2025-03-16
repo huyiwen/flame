@@ -1,1 +1,3 @@
-from hyw.models.hybrid import HybridConfig, HybridForCausalLM, HybridModel
+import hyw.models
+import hyw.modules
+import hyw.ops

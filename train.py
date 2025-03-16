@@ -16,6 +16,7 @@ from torch.distributed.elastic.multiprocessing.errors import record
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 import fla  # noqa
+import hyw  # noqa
 from fla.modules.fused_linear_cross_entropy import FusedLinearCrossEntropyLoss
 from flame.components.checkpoint import CheckpointManager, TrainState
 from fla.ops.common.utils import prepare_position_ids
@@ -336,7 +337,6 @@ def main(job_config: JobConfig):
             cp=job_config.experimental.context_parallel_degree,
             tp=job_config.training.tensor_parallel_degree,
             pp=job_config.experimental.pipeline_parallel_degree,
-            ep=job_config.experimental.expert_parallel_degree,
             world_size=world_size,
             enable_loss_parallel=not job_config.training.disable_loss_parallel,
         )
@@ -415,12 +415,8 @@ def main(job_config: JobConfig):
     )
 
     logger.info(f"Loading model config from {job_config.model.config}")
-    model_config: PretrainedConfig = AutoConfig.from_pretrained(job_config.model.config,
+    model_config = AutoConfig.from_pretrained(job_config.model.config,
                                               trust_remote_code=True)
-    model_config.use_cache = False
-    if parallel_dims.ep > 1:
-        assert parallel_dims.cp == 1
-    model_config.ep = parallel_dims.ep
     # set the model configs from training inputs:
     # 1. norm type to decide which norm layer to use
     # 2. disable fused norm if TP is enabled
@@ -492,7 +488,7 @@ def main(job_config: JobConfig):
             has_last_stage,
         ) = train_spec.pipelining_fn(
             model,
-            pp_mesh,
+            pp_mesh,  # type: ignore
             parallel_dims,
             job_config,
             device,
@@ -755,7 +751,7 @@ def main(job_config: JobConfig):
                 [p for m in model_parts for p in m.parameters()],
                 job_config.training.max_norm,
                 foreach=True,
-                pp_mesh=pp_mesh if parallel_dims.pp_enabled else None,
+                pp_mesh=pp_mesh if parallel_dims.pp_enabled else None,  # type: ignore
             )
 
             # optimizer step
@@ -862,9 +858,10 @@ def main(job_config: JobConfig):
                 metric_logger.log(metrics, step=train_state.step)
 
                 # tgs: {round(tgs):7,}
+                max_vio_str = f"max_vio: {max_vio:7.4f}  " if max_vio is not None else ""
                 logger.info(
                     f"{color.cyan}step: {train_state.step:>8,} token: {train_state.token // 1e6 / 1e3:>7,}B  "
-                    f"{color.green}loss: {global_avg_loss:7.4f}  max_vio: {max_vio:7.4f}  "
+                    f"{color.green}loss: {global_avg_loss:7.4f}  " + max_vio_str +
                     f"{color.blue}lr: {last_lr:.4e} gnorm: {grad_norm:5.3f} "
                     f"{color.yellow}memory: {device_mem_stats.max_reserved_gib:5.2f}GiB "
                     f"{color.red}mfu: {mfu:6.2%} "
@@ -904,6 +901,7 @@ def main(job_config: JobConfig):
 
 if __name__ == "__main__":
     init_logger()
+    logger.handlers = [logger.handlers[-1]]
     if int(os.getenv('LOCAL_RANK', '0')):
         logger.setLevel("WARNING")
     config = JobConfig()

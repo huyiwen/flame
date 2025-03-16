@@ -10,8 +10,8 @@ logging.basicConfig(
 
 # Try to import the custom GEMM implementations
 try:
-    from fla.ops.group_gemm.tgroup_gemm_backwards import grouped_gemm_backward
-    from fla.ops.group_gemm.tgroup_gemm_forward import grouped_gemm_forward
+    from hyw.ops.group_gemm.tgroup_gemm_backwards import grouped_gemm_backward
+    from hyw.ops.group_gemm.tgroup_gemm_forward import grouped_gemm_forward
 
     _HAS_CUSTOM_GEMM = True
 except ImportError:

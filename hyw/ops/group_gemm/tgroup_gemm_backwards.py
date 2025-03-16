@@ -11,7 +11,7 @@ import torch
 import triton
 import triton.language as tl
 
-from fla.ops.group_gemm.tma_utils import TmaAutoTuneHelper
+from hyw.ops.group_gemm.tma_utils import TmaAutoTuneHelper
 
 # Configure logging
 logging.basicConfig(

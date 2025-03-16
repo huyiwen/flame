@@ -12,7 +12,6 @@ print_args = true
 batch_size = ${BATCH_SIZE}
 seq_len = ${SEQ_LEN}
 context_len = ${SEQ_LEN}
-warmup_steps = ${WARMUP_STEPS}
 gradient_accumulation_steps = ${GAS}
 # steps = ${STEPS}
 max_norm = 1.0
@@ -35,9 +34,13 @@ name = "AdamW"
 eps = 1e-15
 fused = true
 lr = ${LR}
-min_lr_ratio = 0.1
-scheduler = 'constant'
 early_step_in_backward = true
+
+[lr_scheduler]
+warmup_steps = ${WARMUP_STEPS}
+lr_min = 0
+decay_ratio = ${DECAY_RATIO}
+decay_type = "sqrt"
 
 [checkpoint]
 enable_checkpoint = true
@@ -71,4 +74,4 @@ force_recompute_fp8_weight_in_bwd = true  # force recomputation of fp8 weights d
 
 [activation_checkpoint]
 mode = "full"  # ['none', 'full', 'selective']
-# selective_ac_option = "54/56"
+selective_ac_option = "op"

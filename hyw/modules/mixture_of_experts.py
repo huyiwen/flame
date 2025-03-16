@@ -4,10 +4,10 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from fla.modules.moe_experts import GroupedExperts
-from fla.modules.moe_mcore_experts import TEGroupedMLP
-from fla.modules.moe_router import TopKRouter
-from fla.modules.moe_token_dispatcher import MoEAllGatherTokenDispatcher
+from hyw.modules.moe_experts import GroupedExperts
+from hyw.modules.moe_mcore_experts import TEGroupedMLP
+from hyw.modules.moe_router import TopKRouter
+from hyw.modules.moe_token_dispatcher import MoEAllGatherTokenDispatcher
 
 
 @torch.no_grad

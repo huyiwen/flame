@@ -3,9 +3,10 @@ from typing import List, Optional, Union
 import torch
 from torch import nn
 
-from fla.modules.activations import swiglu, swiglu_grouped_linear
+from fla.modules.activations import swiglu
+from hyw.modules.activations import swiglu_grouped_linear
 from fla.modules.mlp import GatedMLP
-from fla.ops.group_gemm.tgroup_gemm import grouped_gemm_with_grad
+from hyw.ops.group_gemm.tgroup_gemm import grouped_gemm_with_grad
 
 
 class SwiGLUGroupedLinear(nn.Module):

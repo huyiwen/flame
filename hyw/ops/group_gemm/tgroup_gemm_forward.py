@@ -14,7 +14,7 @@ import triton
 import triton.language as tl
 from triton.runtime import driver  # @manual
 
-import fla.ops.group_gemm.tma_utils as utils
+import hyw.ops.group_gemm.tma_utils as utils
 
 """
 _NV_CONFIGS = [
