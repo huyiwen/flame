@@ -27,18 +27,18 @@ bash train.sh -h
 Training a 340M model:
 
 NNODE=1 NGPU=8 LOG_RANK=0 bash train.sh \
-  --job.config_file train.toml \
+  --job.config_file flame/models/fla.toml \
   --job.dump_folder exp/transformer-340M-10B/batch32.seqlen2048.warmup1024.update1.steps20480.lr3e-4 \
   --model.config configs/transformer_340M.json \
   --model.tokenizer_path fla-hub/transformer-1.3B-100B \
   --optimizer.name AdamW \
   --optimizer.eps 1e-15 \
   --optimizer.lr 3e-4 \
-  --optimizer.min_lr_ratio 0.1 \
-  --optimizer.scheduler cosine \
+  --lr_scheduler.warmup_steps 1024 \
+  --lr_scheduler.lr_min 0.1 \
+  --lr_scheduler.decay_type cosine \
   --training.batch_size 32 \
   --training.seq_len 2048 \
-  --training.warmup_steps 1024 \
   --training.gradient_accumulation_steps 1 \
   --training.steps 20480 \
   --training.max_norm 1.0 \
@@ -65,6 +65,9 @@ path=$(grep -oP '(?<=--job.dump_folder )[^ ]+' <<< "$params")
 steps=$(grep -oP '(?<=--training.steps )[^ ]+' <<< "$params")
 config=$(grep -oP '(?<=--model.config )[^ ]+' <<< "$params")
 tokenizer=$(grep -oP '(?<=--model.tokenizer_path )[^ ]+' <<< "$params")
+model=$(
+  python -c "import fla, sys; from transformers import AutoConfig; print(AutoConfig.from_pretrained(sys.argv[1]).to_json_string())" "$config" | jq -r '.model_type'
+)
 
 mkdir -p $path
 cp * $path
@@ -85,7 +88,7 @@ if [[ -z "${WANDB_PROJECT}" ]]; then
   export WANDB_PROJECT="fla"
 fi
 if [[ -z "${WANDB_NAME}" ]]; then
-  export WANDB_NAME="$(basename $path)"
+  export WANDB_NAME="$model-$(basename $path)"
 fi
 if [[ -z "${WANDB_RUN_ID}" ]]; then
   export WANDB_RUN_ID="$WANDB_NAME-$date"
@@ -104,7 +107,7 @@ torchrun --nnodes=${NNODE} \
 
 echo "TRAINING DONE!"
 echo "Converting the DCP checkpoints to HF format..."
-python convert_dcp_to_hf.py \
+python -m flame.utils.convert_dcp_to_hf \
   --path $path \
   --step $steps \
   --config $config \
