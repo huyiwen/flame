@@ -109,7 +109,7 @@ class NSAPreTrainedModel(PreTrainedModel):
     def _init_weights(
         self,
         module: nn.Module,
-        prenorm_residual_strategy: Optional[str] = 'zero',
+        prenorm_residual_strategy: Optional[str] = 'rescale',
         num_residuals_per_layer: int = 2,
     ):
         def trunc_norm_kwargs(std):

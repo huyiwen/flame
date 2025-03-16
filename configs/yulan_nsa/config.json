@@ -8,7 +8,7 @@
     "hidden_act": "swish",
     "hidden_ratio": null,
     "hidden_size": 2048,
-    "initializer_range": 0.006,
+    "initializer_range": 0.0025,
     "intermediate_size": 5120,
     "max_position_embeddings": 4096,
     "model_type": "hyw_nsa",

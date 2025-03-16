@@ -860,10 +860,11 @@ def main(job_config: JobConfig):
 
                 # tgs: {round(tgs):7,}
                 max_vio_str = f"max_vio: {max_vio:7.4f}  " if max_vio is not None else ""
+                gnorm_str = f"gnorm: {grad_norm:5.3f} " if f"{grad_norm:5.3f}" != "0.000" else ""
                 logger.info(
                     f"{color.cyan}step: {train_state.step:>8,} token: {train_state.token // 1e6 / 1e3:>7,}B  "
                     f"{color.green}loss: {global_avg_loss:7.4f}  " + max_vio_str +
-                    f"{color.blue}lr: {last_lr:.4e} gnorm: {grad_norm:5.3f} "
+                    f"{color.blue}lr: {last_lr:.4e} " + gnorm_str +
                     f"{color.yellow}memory: {device_mem_stats.max_reserved_gib:5.2f}GiB "
                     f"{color.red}mfu: {mfu:6.2%} "
                     f"{color.magenta}[{str(train_state.elapsed).split('.')[0]:>8}<{str(eta).split('.')[0]:>8}]{color.reset}"
