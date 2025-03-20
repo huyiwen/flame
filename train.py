@@ -854,7 +854,7 @@ def main(job_config: JobConfig):
             max_vio = sum(max_vio) / len(max_vio) if max_vio else None
 
             # clip gradients
-            grad_norm = clip_grad_norm_(
+            grad_norm = dist_utils.clip_grad_norm_(
                 [p for m in model_parts for p in m.named_parameters()],
                 job_config.training.max_norm,
                 foreach=True,
