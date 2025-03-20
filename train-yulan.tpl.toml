@@ -34,7 +34,7 @@ name = "AdamW"
 eps = 1e-15
 fused = true
 lr = ${LR}
-early_step_in_backward = true
+early_step_in_backward = false
 
 [lr_scheduler]
 warmup_steps = ${WARMUP_STEPS}
