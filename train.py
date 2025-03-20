@@ -372,8 +372,10 @@ def clip_grad_norm_(
             grads.append(p.grad)
         idx = MODULES_TO_LOG.get(n)
         if idx is not None:
-            # weights_logger(idx, p)
-            grads_logger(idx, p.grad)
+            print(idx)
+            weights_logger(idx, p)
+            if p.grad is not None:
+                grads_logger(idx, p.grad)
 
     total_norm = torch.nn.utils.get_total_norm(
         grads, norm_type, error_if_nonfinite, foreach
