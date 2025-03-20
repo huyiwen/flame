@@ -31,6 +31,35 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+def get_hidden_states_logger(layer_idx, num_hidden_layers=None):
+    import wandb
+    if num_hidden_layers is None:
+        log_interval = None
+    else:
+        log_interval = (num_hidden_layers - 1) // 5
+
+    @torch.no_grad()
+    def log_hidden_states_decoder_layers(name, hidden_states):
+        if layer_idx % log_interval == 0 and wandb.run is not None and wandb.config.get("global_step", 0) % 23 == 0:
+            layer = layer_idx // log_interval + 1
+            # wandb.log({f"hidden_states_var/{layer}_{name}": torch.var(hidden_states, dim=-1).mean().item()}, commit=False)
+            # wandb.log({f"hidden_states_mean/{layer}_{name}": torch.mean(hidden_states, dim=-1).mean().item()}, commit=False)
+            # wandb.log({f"hidden_states_rms/{layer}_{name}": torch.sqrt(torch.mean(hidden_states**2, dim=-1)).mean().item()}, commit=False)
+
+    @torch.no_grad()
+    def log_hidden_states_transformers(layer_idx, name, hidden_states):
+        if wandb.run is not None and  wandb.config.get("global_step", 0) % 23 == 0:
+            pass
+            # wandb.log({f"hidden_states_var/{layer_idx}_{name}": torch.var(hidden_states, dim=-1).mean().item()}, commit=False)
+            # wandb.log({f"hidden_states_mean/{layer_idx}_{name}": torch.mean(hidden_states, dim=-1).mean().item()}, commit=False)
+            # wandb.log({f"hidden_states_rms/{layer_idx}_{name}": torch.sqrt(torch.mean(hidden_states**2, dim=-1)).mean().item()}, commit=False)
+
+    if num_hidden_layers is None:
+        return log_hidden_states_transformers
+    else:
+        return log_hidden_states_decoder_layers
+
+
 class TransformerBlock(nn.Module):
 
     def __init__(self, config: TransformerConfig, layer_idx: int):
