@@ -308,15 +308,15 @@ def get_peak_flops(device_name: str) -> int:
 
 MODULES_TO_LOG = [
     "model.embeddings.weight",
-    "model.layers.0.attn_norm.weight",
-    "model.layers.0.attn.q_proj.weight",
-    "model.layers.0.attn.k_proj.weight",
-    "model.layers.0.attn.v_proj.weight",
-    "model.layers.0.attn.o_proj.weight",
-    "model.layers.0.mlp_norm.weight",
-    "model.layers.0.mlp.gate_proj.weight",
-    "model.layers.0.mlp.up_proj.weight",
-    "model.layers.0.mlp.down_proj.weight",
+    "model.model.layers.0.attn_norm.weight",
+    "model.model.layers.0.attn.q_proj.weight",
+    "model.model.layers.0.attn.k_proj.weight",
+    "model.model.layers.0.attn.v_proj.weight",
+    "model.model.layers.0.attn.o_proj.weight",
+    "model.model.layers.0.mlp_norm.weight",
+    "model.model.layers.0.mlp.gate_proj.weight",
+    "model.model.layers.0.mlp.up_proj.weight",
+    "model.model.layers.0.mlp.down_proj.weight",
     "model.norm.weight",
     "model.lm_head.weight"
 ]

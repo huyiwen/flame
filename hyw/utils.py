@@ -22,12 +22,13 @@ def get_hidden_states_logger(
     def logger(name: str, hidden_states: Optional[torch.Tensor]):
         if wandb.run is None or hidden_states is None:
             return
+        hidden_states = hidden_states.detach()
         if log_interval is None or layer_idx % log_interval == 0:
             hs = {
-                f"{prefix}_var/{layer_idx}_{name}": torch.var(hidden_states, dim=-1).mean().item(),
-                f"{prefix}_mean/{layer_idx}_{name}": torch.mean(hidden_states, dim=-1).mean().item(),
-                f"{prefix}_max/{layer_idx}_{name}": torch.max(hidden_states, dim=-1)[0].mean().item(),
-                f"{prefix}_min/{layer_idx}_{name}": torch.min(hidden_states, dim=-1)[0].mean().item(),
+                f"{prefix}_var/{layer_idx:02}_{name}": torch.var(hidden_states, dim=-1).mean().item(),
+                f"{prefix}_mean/{layer_idx:02}_{name}": torch.mean(hidden_states, dim=-1).mean().item(),
+                f"{prefix}_max/{layer_idx:02}_{name}": torch.max(hidden_states, dim=-1)[0].mean().item(),
+                f"{prefix}_min/{layer_idx:02}_{name}": torch.min(hidden_states, dim=-1)[0].mean().item(),
             }
             wandb.log(hs, commit=False)
 
