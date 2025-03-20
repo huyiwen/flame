@@ -16,12 +16,14 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 from transformers.utils.deprecation import deprecate_kwarg
 
-from fla.layers.attn import Attention
 from fla.modules import FusedCrossEntropyLoss, FusedLinearCrossEntropyLoss
-from fla.modules import GatedMLP as TransformerMLP
 from fla.modules import RMSNorm
 
+# modules with logger
+from hyw.layers.attn import Attention
+from hyw.modules import GatedMLP as TransformerMLP
 from hyw.models.hyw_xfmr.configuration_transformer import TransformerConfig
+from hyw.utils import get_hidden_states_logger
 
 if TYPE_CHECKING:
     from transformers.processing_utils import Unpack
@@ -29,35 +31,6 @@ if TYPE_CHECKING:
     from fla.models.utils import Cache
 
 logger = logging.get_logger(__name__)
-
-
-def get_hidden_states_logger(layer_idx, num_hidden_layers=None):
-    import wandb
-    if num_hidden_layers is None:
-        log_interval = None
-    else:
-        log_interval = (num_hidden_layers - 1) // 5
-
-    @torch.no_grad()
-    def log_hidden_states_decoder_layers(name, hidden_states):
-        if layer_idx % log_interval == 0 and wandb.run is not None and wandb.config.get("global_step", 0) % 23 == 0:
-            layer = layer_idx // log_interval + 1
-            # wandb.log({f"hidden_states_var/{layer}_{name}": torch.var(hidden_states, dim=-1).mean().item()}, commit=False)
-            # wandb.log({f"hidden_states_mean/{layer}_{name}": torch.mean(hidden_states, dim=-1).mean().item()}, commit=False)
-            # wandb.log({f"hidden_states_rms/{layer}_{name}": torch.sqrt(torch.mean(hidden_states**2, dim=-1)).mean().item()}, commit=False)
-
-    @torch.no_grad()
-    def log_hidden_states_transformers(layer_idx, name, hidden_states):
-        if wandb.run is not None and  wandb.config.get("global_step", 0) % 23 == 0:
-            pass
-            # wandb.log({f"hidden_states_var/{layer_idx}_{name}": torch.var(hidden_states, dim=-1).mean().item()}, commit=False)
-            # wandb.log({f"hidden_states_mean/{layer_idx}_{name}": torch.mean(hidden_states, dim=-1).mean().item()}, commit=False)
-            # wandb.log({f"hidden_states_rms/{layer_idx}_{name}": torch.sqrt(torch.mean(hidden_states**2, dim=-1)).mean().item()}, commit=False)
-
-    if num_hidden_layers is None:
-        return log_hidden_states_transformers
-    else:
-        return log_hidden_states_decoder_layers
 
 
 class TransformerBlock(nn.Module):
@@ -90,6 +63,9 @@ class TransformerBlock(nn.Module):
             hidden_act=config.hidden_act,
             fuse_swiglu=config.fuse_swiglu
         )
+        self.block_logger = get_hidden_states_logger(layer_idx=self.layer_idx + 1, num_hidden_layers=config.num_hidden_layers, log_interval=config.num_hidden_layers)
+        self.attn.block_logger = self.block_logger
+        self.mlp.block_logger = self.block_logger
 
     def forward(
         self,
@@ -102,6 +78,7 @@ class TransformerBlock(nn.Module):
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
         hidden_states = self.attn_norm(hidden_states)
+        self.block_logger("1_attn_norm", hidden_states)
         hidden_states, attentions, past_key_values = self.attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -110,14 +87,18 @@ class TransformerBlock(nn.Module):
             output_attentions=output_attentions,
             **kwargs
         )
+        self.block_logger("4_attn", hidden_states)
         if self.config.fuse_norm:
             hidden_states, residual = self.mlp_norm(hidden_states * self.scale_non_residual, residual, True)
         else:
             hidden_states = residual + hidden_states * self.scale_non_residual
             residual = hidden_states
             hidden_states = self.mlp_norm(hidden_states)
+        self.block_logger("5_mlp_norm", hidden_states)
         hidden_states = self.mlp(hidden_states, **kwargs)
+        self.block_logger("7_mlp", hidden_states)
         hidden_states = residual + hidden_states * self.scale_non_residual
+        self.block_logger("8_residual", hidden_states)
 
         outputs = (hidden_states,)
 
@@ -202,6 +183,8 @@ class TransformerModel(TransformerPreTrainedModel):
         self.norm = (RMSNorm if config.fuse_norm else nn.RMSNorm)(config.hidden_size, eps=config.norm_eps)
 
         self.gradient_checkpointing = False
+        self.input_logger = get_hidden_states_logger(layer_idx=0, num_hidden_layers=config.num_hidden_layers)
+        self.output_logger = get_hidden_states_logger(layer_idx=config.num_hidden_layers + 1, num_hidden_layers=config.num_hidden_layers)
 
         self.post_init()
 
@@ -247,6 +230,7 @@ class TransformerModel(TransformerPreTrainedModel):
 
         # embed positions
         hidden_states = inputs_embeds
+        self.input_logger("embed", hidden_states)
 
         if use_cache and not isinstance(past_key_values, Cache):
             past_key_values = Cache.from_legacy_cache(past_key_values)
@@ -292,6 +276,7 @@ class TransformerModel(TransformerPreTrainedModel):
                 all_attns += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
+        self.output_logger("norm", hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:

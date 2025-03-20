@@ -6,11 +6,10 @@
 
 import json
 import os
-import sys
 import time
 import math
 from datetime import timedelta
-from typing import  Iterable, Optional, Union
+from typing import Iterable, Optional, Tuple, List
 
 import torch
 import torch.distributed.distributed_c10d as c10d
@@ -23,6 +22,7 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 import fla  # noqa
 import hyw  # noqa
+from hyw.utils import get_hidden_states_logger
 from fla.modules.fused_linear_cross_entropy import FusedLinearCrossEntropyLoss
 from flame.components.checkpoint import CheckpointManager, TrainState
 from fla.ops.common.utils import prepare_position_ids
@@ -306,9 +306,32 @@ def get_peak_flops(device_name: str) -> int:
         return 312e12
 
 
+MODULES_TO_LOG = [
+    "model.embeddings.weight",
+    "model.layers.0.attn_norm.weight",
+    "model.layers.0.attn.q_proj.weight",
+    "model.layers.0.attn.k_proj.weight",
+    "model.layers.0.attn.v_proj.weight",
+    "model.layers.0.attn.o_proj.weight",
+    "model.layers.0.mlp_norm.weight",
+    "model.layers.0.mlp.gate_proj.weight",
+    "model.layers.0.mlp.up_proj.weight",
+    "model.layers.0.mlp.down_proj.weight",
+    "model.norm.weight",
+    "model.lm_head.weight"
+]
+MODULES_TO_LOG = {
+    n: f"{i}_{n.replace('.weight', '').split('.')[-1]}"
+    for i, n in enumerate(MODULES_TO_LOG)
+}
+
+weights_logger = get_hidden_states_logger(0, prefix="w")
+grads_logger = get_hidden_states_logger(0, prefix="g")
+
+
 @torch.no_grad()
 def clip_grad_norm_(
-    parameters: Union[torch.Tensor, Iterable[torch.Tensor]],
+    named_parameters: Iterable[Tuple[str, torch.Tensor]],
     max_norm: float,
     norm_type: float = 2.0,
     error_if_nonfinite: bool = False,
@@ -341,9 +364,17 @@ def clip_grad_norm_(
         Total norm of the parameter gradients (viewed as a single vector).
 
     """
-    if len(parameters) == 0:
-        logger.warning(f"Rank {c10d.get_rank()} has no parameters to clip.")
-    grads = [p.grad for p in parameters if p.grad is not None]
+    grads = []
+    parameters = []
+    for n, p in named_parameters:
+        parameters.append(p)
+        if p.grad is not None:
+            grads.append(p.grad)
+        idx = MODULES_TO_LOG.get(n)
+        if idx is not None:
+            weights_logger(idx, p)
+            grads_logger(idx, p.grad)
+
     total_norm = torch.nn.utils.get_total_norm(
         grads, norm_type, error_if_nonfinite, foreach
     )
@@ -593,7 +624,7 @@ def main(job_config: JobConfig):
             model.post_init()
         model.train()
 
-        model_parts = [model]
+        model_parts: List[torch.nn.Module] = [model]
 
     device_mem_stats = device_memory_monitor.get_peak_stats()
     logger.info(f"{device_type.upper()} memory usage for model: "
@@ -823,7 +854,7 @@ def main(job_config: JobConfig):
 
             # clip gradients
             grad_norm = clip_grad_norm_(
-                [p for m in model_parts for p in m.parameters()],
+                [p for m in model_parts for p in m.named_parameters()],
                 job_config.training.max_norm,
                 foreach=True,
                 pp_mesh=pp_mesh if parallel_dims.pp_enabled else None,  # type: ignore
