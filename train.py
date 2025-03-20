@@ -308,15 +308,15 @@ def get_peak_flops(device_name: str) -> int:
 
 MODULES_TO_LOG = [
     "model.embeddings.weight",
-    "model.layers.0.attn_norm.weight",
-    "model.layers.0.attn.q_proj.weight",
-    "model.layers.0.attn.k_proj.weight",
-    "model.layers.0.attn.v_proj.weight",
-    "model.layers.0.attn.o_proj.weight",
-    "model.layers.0.mlp_norm.weight",
-    "model.layers.0.mlp.gate_proj.weight",
-    "model.layers.0.mlp.up_proj.weight",
-    "model.layers.0.mlp.down_proj.weight",
+    "model.layers.0._checkpoint_wrapped_module.attn_norm.weight",
+    "model.layers.0._checkpoint_wrapped_module.attn.q_proj.weight",
+    "model.layers.0._checkpoint_wrapped_module.attn.k_proj.weight",
+    "model.layers.0._checkpoint_wrapped_module.attn.v_proj.weight",
+    "model.layers.0._checkpoint_wrapped_module.attn.o_proj.weight",
+    "model.layers.0._checkpoint_wrapped_module.mlp_norm.weight",
+    "model.layers.0._checkpoint_wrapped_module.mlp.gate_proj.weight",
+    "model.layers.0._checkpoint_wrapped_module.mlp.up_proj.weight",
+    "model.layers.0._checkpoint_wrapped_module.mlp.down_proj.weight",
     "model.norm.weight",
     "model.lm_head.weight"
 ]
@@ -365,15 +365,16 @@ def clip_grad_norm_(
 
     """
     grads = []
+    parameters = []
     for n, p in named_parameters:
+        parameters.append(p)
         if p.grad is not None:
             grads.append(p.grad)
-        print(n)
         idx = MODULES_TO_LOG.get(n)
         if idx is not None:
-            weights_logger(idx, p)
+            weights_logger(idx, p.data)
             if p.grad is not None:
-                grads_logger(idx, p.grad)
+                grads_logger(idx, p.grad.data)
 
     total_norm = torch.nn.utils.get_total_norm(
         grads, norm_type, error_if_nonfinite, foreach
@@ -401,7 +402,7 @@ def clip_grad_norm_(
             dist.all_reduce(total_norm, op=dist.ReduceOp.SUM, group=pp_mesh.get_group())
             total_norm **= 1.0 / norm_type
 
-    torch.nn.utils.clip_grads_with_norm_(list(named_parameters.values()), max_norm, total_norm, foreach)
+    torch.nn.utils.clip_grads_with_norm_(parameters, max_norm, total_norm, foreach)
     return total_norm
 
 
