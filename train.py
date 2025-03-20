@@ -855,7 +855,7 @@ def main(job_config: JobConfig):
 
             # clip gradients
             grad_norm = dist_utils.clip_grad_norm_(
-                [p for m in model_parts for p in m.named_parameters()],
+                [p for m in model_parts for p in m.parameters()],
                 job_config.training.max_norm,
                 foreach=True,
                 pp_mesh=pp_mesh if parallel_dims.pp_enabled else None,  # type: ignore
