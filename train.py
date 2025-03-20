@@ -375,6 +375,7 @@ def clip_grad_norm_(
             weights_logger(idx, p)
             grads_logger(idx, p.grad)
 
+    print(len(grads))
     total_norm = torch.nn.utils.get_total_norm(
         grads, norm_type, error_if_nonfinite, foreach
     )
