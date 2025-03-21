@@ -12,7 +12,6 @@ from datetime import timedelta
 from typing import Iterable, Optional, Tuple, List
 
 import torch
-import torch.distributed.distributed_c10d as c10d
 from datasets import concatenate_datasets, interleave_datasets, load_dataset
 from torch import distributed as dist
 from torch.distributed.elastic.multiprocessing.errors import record
