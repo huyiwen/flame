@@ -200,7 +200,7 @@ def _opt_load_state_dict(self, state_dict: Dict[str, Any]) -> None:
     func = functools.partial(
         set_optimizer_state_dict,
         optim_state_dict=state_dict,
-        options=StateDictOptions(flatten_optimizer_state_dict=True, strict=False),
+        options=StateDictOptions(flatten_optimizer_state_dict=True, ignore_frozen_params=True),
     )
     list(map(func, self.model_parts, self.optimizers))
 
