@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from io import BytesIO
 from multiprocessing import get_context
+from types import MethodType
 from typing import Any, Dict, List, Optional, Union
 
 import torch
@@ -28,7 +29,8 @@ from torch.distributed._state_dict_utils import (_copy_state_dict,
 from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
 from torch.distributed.checkpoint.state_dict import (StateDictOptions,
                                                      get_model_state_dict,
-                                                     set_model_state_dict)
+                                                     set_model_state_dict,
+                                                     set_optimizer_state_dict)
 from torch.distributed.checkpoint.stateful import Stateful
 from torch.utils.data import DataLoader
 
@@ -194,6 +196,15 @@ def purge_thread(purge_queue: queue.Queue):
         logger.info("Destroying the purge thread.")
 
 
+def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    func = functools.partial(
+        set_optimizer_state_dict,
+        optim_state_dict=state_dict,
+        options=StateDictOptions(flatten_optimizer_state_dict=True, strict=False),
+    )
+    list(map(func, self.model_parts, self.optimizers))
+
+
 class CheckpointManager:
     """This class manages the checkpointing logic for the TorchTitan trainer.
 
@@ -264,6 +275,7 @@ class CheckpointManager:
         self.mp = None
         self.purge_thread = None
 
+        optimizers.load_state_dict = MethodType(load_state_dict, optimizers)
         if self.ft_manager:
             optimizers.init_cache_state_dict()
 
