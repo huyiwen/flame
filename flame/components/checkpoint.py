@@ -197,10 +197,11 @@ def purge_thread(purge_queue: queue.Queue):
 
 
 def _opt_load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    print(list(state_dict.keys()))
     func = functools.partial(
         set_optimizer_state_dict,
         optim_state_dict=state_dict,
-        options=StateDictOptions(flatten_optimizer_state_dict=True, ignore_frozen_params=True),
+        options=StateDictOptions(flatten_optimizer_state_dict=True),
     )
     list(map(func, self.model_parts, self.optimizers))
 
@@ -471,7 +472,7 @@ class CheckpointManager:
         logger.info(f"Loading the checkpoint at step {step}.")
         begin = time.monotonic()
         states = self._states_to_load(step)
-        dcp.load(states, checkpoint_id=checkpoint_id, planner=DefaultLoadPlanner(allow_partial_load=True))
+        dcp.load(states, checkpoint_id=checkpoint_id, planner=DefaultLoadPlanner(allow_partial_load=False))
         GarbageCollection.collect("GC collection for checkpoint loading.")
         logger.info(
             f"Finished loading the checkpoint in {time.monotonic() - begin:.2f} seconds."
