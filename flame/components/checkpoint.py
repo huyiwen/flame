@@ -196,7 +196,7 @@ def purge_thread(purge_queue: queue.Queue):
         logger.info("Destroying the purge thread.")
 
 
-def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+def _opt_load_state_dict(self, state_dict: Dict[str, Any]) -> None:
     func = functools.partial(
         set_optimizer_state_dict,
         optim_state_dict=state_dict,
@@ -275,7 +275,7 @@ class CheckpointManager:
         self.mp = None
         self.purge_thread = None
 
-        optimizers.load_state_dict = MethodType(load_state_dict, optimizers)
+        optimizers.load_state_dict = MethodType(_opt_load_state_dict, optimizers)
         if self.ft_manager:
             optimizers.init_cache_state_dict()
 
