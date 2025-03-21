@@ -44,7 +44,7 @@ class TransformerBlock(nn.Module):
         if self.scale_non_residual is None:
             self.scale_non_residual = 1
 
-        self.attn_norm = (RMSNorm if config.fuse_norm else nn.RMSNorm)(config.hidden_size, eps=config.norm_eps)
+        self.attn_norm = (RMSNorm if config.fuse_norm else nn.RMSNorm)(config.hidden_size, eps=config.norm_eps, elementwise_affine=layer_idx > 0)
         self.attn = Attention(
             hidden_size=config.hidden_size,
             num_heads=config.num_heads,
