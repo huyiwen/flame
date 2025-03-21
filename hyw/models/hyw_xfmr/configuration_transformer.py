@@ -35,6 +35,8 @@ class TransformerConfig(PretrainedConfig):
         fuse_swiglu: bool = True,
         fuse_cross_entropy: bool = True,
         vocab_size: int = 32000,
+        scale_emb: float = 1,
+        scale_non_residual: float = 1,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -59,6 +61,9 @@ class TransformerConfig(PretrainedConfig):
         self.fuse_swiglu = fuse_swiglu
         self.fuse_cross_entropy = fuse_cross_entropy
         self.vocab_size = vocab_size
+
+        self.scale_emb = scale_emb
+        self.scale_non_residual = scale_non_residual
 
         super().__init__(
             pad_token_id=pad_token_id,

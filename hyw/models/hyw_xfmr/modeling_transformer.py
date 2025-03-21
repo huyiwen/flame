@@ -186,6 +186,8 @@ class TransformerModel(TransformerPreTrainedModel):
         self.input_logger = get_hidden_states_logger(layer_idx=0, num_hidden_layers=config.num_hidden_layers)
         self.output_logger = get_hidden_states_logger(layer_idx=config.num_hidden_layers + 1, num_hidden_layers=config.num_hidden_layers)
 
+        self.scale_emb = config.scale_emb
+
         self.post_init()
 
     def get_input_embeddings(self):
@@ -226,7 +228,7 @@ class TransformerModel(TransformerPreTrainedModel):
             past_key_values = Cache.from_legacy_cache(past_key_values)
 
         if inputs_embeds is None:
-            inputs_embeds = self.embeddings(input_ids)
+            inputs_embeds = self.embeddings(input_ids) * self.scale_emb
 
         # embed positions
         hidden_states = inputs_embeds
