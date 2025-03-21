@@ -35,8 +35,8 @@ from torchtitan.components.loss import cross_entropy_loss
 from torchtitan.components.metrics import (_build_metric_logger,
                                            build_device_memory_monitor,
                                            ensure_pp_loss_visible)
-from torchtitan.components.optimizer import (build_lr_schedulers,
-                                             build_optimizers)
+from torchtitan.components.optimizer import build_optimizers
+from torchtitan.components.lr_scheduler import build_lr_schedulers
 from torchtitan.distributed import ParallelDims
 from torchtitan.distributed import utils as dist_utils
 from torchtitan.protocols.model_converter import build_model_converters
