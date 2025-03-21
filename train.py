@@ -47,6 +47,11 @@ from torchtitan.tools.logging import init_logger, logger
 from torchtitan.tools.profiling import (maybe_enable_memory_snapshot,
                                         maybe_enable_profiling)
 
+def build_tokenizer(job_config):
+    return AutoTokenizer.from_pretrained(job_config.model.tokenizer_path,
+                                              trust_remote_code=True,
+                                              model_max_length=int(1e10))
+
 register_train_spec(
     TrainSpec(
         name="fla",
@@ -57,7 +62,7 @@ register_train_spec(
         build_optimizers_fn=build_optimizers,
         build_lr_schedulers_fn=build_lr_schedulers,
         build_dataloader_fn=build_dataloader,
-        tokenizer_cls=AutoTokenizer,
+        build_tokenizer_fn=build_tokenizer,
         loss_fn=cross_entropy_loss,
     )
 )
@@ -488,9 +493,7 @@ def main(job_config: JobConfig):
     train_spec = get_train_spec(job_config.model.name)
 
     logger.info("Loading tokenizer...")
-    tokenizer = AutoTokenizer.from_pretrained(job_config.model.tokenizer_path,
-                                              trust_remote_code=True,
-                                              model_max_length=int(1e10))
+    tokenizer = train_spec.build_tokenizer_fn(job_config)
     logger.info(f"{tokenizer}")
     logger.info(f"Loading dataset {job_config.training.dataset}"
                 f":{job_config.training.dataset_name}" if job_config.training.
