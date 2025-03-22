@@ -14,6 +14,7 @@ from einops import rearrange
 from transformers.utils import logging
 
 from fla.modules import RotaryEmbedding
+from fla.modules import RMSNorm
 
 if TYPE_CHECKING:
     from fla.models.utils import Cache
@@ -43,7 +44,8 @@ class Attention(nn.Module):
         window_size: Optional[int] = None,
         rope_theta: Optional[float] = 10000.,
         max_position_embeddings: Optional[int] = None,
-        layer_idx: int = None
+        layer_idx: int = None,
+        o_norm: bool = False,
     ):
         super().__init__()
 
@@ -70,6 +72,8 @@ class Attention(nn.Module):
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
         self.rotary = RotaryEmbedding(dim=self.head_dim, base=self.rope_theta)
+
+        self.o_norm = RMSNorm(hidden_size) if o_norm else None
 
         self.block_logger = None
 
@@ -164,6 +168,9 @@ class Attention(nn.Module):
             )
         o = o.reshape(batch_size, q_len, -1)
         self.block_logger("3_o", o)
+        if self.o_norm:
+            o = self.o_norm(o)
+            self.block_logger("3_o_norm", o)
         o = self.o_proj(o)
 
         if not output_attentions:

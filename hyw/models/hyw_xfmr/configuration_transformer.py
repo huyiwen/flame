@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from typing import Optional
+from typing import Optional, Literal
 
 from transformers.configuration_utils import PretrainedConfig
 
@@ -37,6 +37,7 @@ class TransformerConfig(PretrainedConfig):
         vocab_size: int = 32000,
         scale_emb: float = 1,
         scale_non_residual: float = 1,
+        norm_type: Literal['pre-norm', 'o-norm'] = 'pre-norm',
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -64,6 +65,7 @@ class TransformerConfig(PretrainedConfig):
 
         self.scale_emb = scale_emb
         self.scale_non_residual = scale_non_residual
+        self.norm_type = norm_type
 
         super().__init__(
             pad_token_id=pad_token_id,

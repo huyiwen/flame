@@ -22,5 +22,6 @@
     "tie_word_embeddings": true,
     "vocab_size": 99000,
     "scale_non_residual": 0.187,
-    "scale_emb": 8
+    "scale_emb": 8,
+    "norm_type": "o-norm"
 }

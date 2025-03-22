@@ -44,7 +44,10 @@ class TransformerBlock(nn.Module):
         if self.scale_non_residual is None:
             self.scale_non_residual = 1
 
-        self.attn_norm = (RMSNorm if config.fuse_norm else nn.RMSNorm)(config.hidden_size, eps=config.norm_eps, elementwise_affine=layer_idx > 0)
+        if config.norm_type == "pre-norm":
+            self.attn_norm = (RMSNorm if config.fuse_norm else nn.RMSNorm)(config.hidden_size, eps=config.norm_eps)
+        else:
+            self.attn_norm = None
         self.attn = Attention(
             hidden_size=config.hidden_size,
             num_heads=config.num_heads,
@@ -53,9 +56,13 @@ class TransformerBlock(nn.Module):
             window_size=config.window_size,
             rope_theta=config.rope_theta,
             max_position_embeddings=config.max_position_embeddings,
-            layer_idx=layer_idx
+            layer_idx=layer_idx,
+            o_norm=config.norm_type == "o-norm",
         )
-        self.mlp_norm = (RMSNorm if config.fuse_norm else nn.RMSNorm)(config.hidden_size, eps=config.norm_eps)
+        if config.norm_type in ["pre-norm", "o-norm"]:
+            self.mlp_norm = (RMSNorm if config.fuse_norm else nn.RMSNorm)(config.hidden_size, eps=config.norm_eps)
+        else:
+            self.mlp_norm = None
         self.mlp = TransformerMLP(
             hidden_size=config.hidden_size,
             hidden_ratio=config.hidden_ratio,
@@ -63,7 +70,7 @@ class TransformerBlock(nn.Module):
             hidden_act=config.hidden_act,
             fuse_swiglu=config.fuse_swiglu
         )
-        self.block_logger = get_hidden_states_logger(layer_idx=self.layer_idx + 1, num_hidden_layers=config.num_hidden_layers, log_interval=config.num_hidden_layers)
+        self.block_logger = get_hidden_states_logger(layer_idx=self.layer_idx + 1, num_hidden_layers=config.num_hidden_layers, log_interval=10)
         self.attn.block_logger = self.block_logger
         self.mlp.block_logger = self.block_logger
 
@@ -77,8 +84,9 @@ class TransformerBlock(nn.Module):
         **kwargs: Unpack[Dict]
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
-        hidden_states = self.attn_norm(hidden_states)
-        self.block_logger("1_attn_norm", hidden_states)
+        if self.attn_norm is not None:
+            hidden_states = self.attn_norm(hidden_states)
+            self.block_logger("1_attn_norm", hidden_states)
         hidden_states, attentions, past_key_values = self.attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -88,13 +96,16 @@ class TransformerBlock(nn.Module):
             **kwargs
         )
         self.block_logger("4_attn", hidden_states)
-        if self.config.fuse_norm:
-            hidden_states, residual = self.mlp_norm(hidden_states * self.scale_non_residual, residual, True)
-        else:
-            hidden_states = residual + hidden_states * self.scale_non_residual
-            residual = hidden_states
-            hidden_states = self.mlp_norm(hidden_states)
-        self.block_logger("5_mlp_norm", hidden_states)
+
+        if self.mlp_norm is not None:
+            if self.config.fuse_norm:
+                hidden_states, residual = self.mlp_norm(hidden_states * self.scale_non_residual, residual, True)
+            else:
+                hidden_states = residual + hidden_states * self.scale_non_residual
+                residual = hidden_states
+                hidden_states = self.mlp_norm(hidden_states)
+            self.block_logger("5_mlp_norm", hidden_states)
+
         hidden_states = self.mlp(hidden_states, **kwargs)
         self.block_logger("7_mlp", hidden_states)
         hidden_states = residual + hidden_states * self.scale_non_residual
