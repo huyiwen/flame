@@ -49,7 +49,7 @@ else:
         "Missing: This group gemm code will not run without TMA descriptor support....",
         file=sys.stderr,
     )
-    raise NotImplementedError("grouped Gemm without TMA is not supported")
+    # raise NotImplementedError("grouped Gemm without TMA is not supported")
 
 
 class TmaAutoTuneHelper:

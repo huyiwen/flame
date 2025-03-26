@@ -4,8 +4,12 @@ from typing import Callable, Optional, Tuple
 import torch
 import transformer_engine as te
 from torch import nn
-from megatron.core.tensor_parallel.utils import divide
-from megatron.core.fusions.fused_bias_swiglu import bias_swiglu_impl
+
+try:
+    from megatron.core.tensor_parallel.utils import divide
+    from megatron.core.fusions.fused_bias_swiglu import bias_swiglu_impl
+except (ImportError, ModuleNotFoundError):
+    divide = bias_swiglu_impl = None
 
 
 class TEGroupedLinear(te.pytorch.GroupedLinear):

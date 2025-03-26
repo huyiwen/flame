@@ -2,7 +2,7 @@
 # config = "/data/metadata/output/miniyulan-2B-final-stage16-nooptim/checkpoint-155587"
 # config = "/data/flame/configs/transformer_340M.json"
 config = "${CONFIG}"
-tokenizer_path = "/data/metadata/output/miniyulan-2B-final-stage16-nooptim/checkpoint-155587"
+tokenizer_path = "yulan-team/YuLan-Mini"
 # converters = "float8"  #  swap nn.Linear with Float8Linear to perform float8 matmul.
 
 [job]
@@ -13,7 +13,7 @@ batch_size = ${BATCH_SIZE}
 seq_len = ${SEQ_LEN}
 context_len = ${SEQ_LEN}
 gradient_accumulation_steps = ${GAS}
-# steps = ${STEPS}
+steps = ${STEPS}
 max_norm = 1.0
 skip_nan_inf = true
 data_parallel_replicate_degree = 1
@@ -21,7 +21,8 @@ data_parallel_shard_degree = -1
 tensor_parallel_degree = 1
 compile = false
 dataset = "${DATASET}"
-dataset_name = "default"
+# data_probs = "0.6,0.15,0.15,0.014,0.058,0.028"
+# dataset_name = "default"
 num_workers = 32
 pin_memory = true
 persistent_workers = false

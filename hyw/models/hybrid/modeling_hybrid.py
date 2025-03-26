@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 try:
     from native_sparse_attention_pytorch import SparseAttention
 except ImportError:
-    pass
+    SparseAttention = object
 
 
 logger = logging.get_logger(__name__)
