@@ -89,6 +89,7 @@ def flame_load_dataset(job_config: JobConfig, dp_degree: int):
         logger.info(f"Num subsets: {len(dataset)}")
         dataset = concatenate_datasets(dataset).shuffle(
             seed=job_config.training.seed)
+        dataset_length = len(dataset)
         logger.info(f"{dataset}")
 
     elif len(job_config.training.dataset.split(',')) == 1:
@@ -105,6 +106,7 @@ def flame_load_dataset(job_config: JobConfig, dp_degree: int):
         )
         logger.info(f"{dataset}")
 
+        dataset_length = len(dataset)
         logger.info(
             f"Shuffling the dataset with seed {job_config.training.seed}")
         if not job_config.training.streaming:
@@ -258,8 +260,9 @@ def flame_load_dataset(job_config: JobConfig, dp_degree: int):
             stopping_strategy='all_exhausted',
             seed=job_config.training.seed,
         )
+        dataset_length = len(dataset)
         logger.info(f"{dataset}")
-    return dataset
+    return dataset, dataset_length
 
 
 # hardcoded BF16 type peak flops for NVIDIA A100, H100, H200 GPU and AMD MI250, MI300X and AMD MI325X
@@ -497,12 +500,12 @@ def main(job_config: JobConfig):
                 f":{job_config.training.dataset_name}" if job_config.training.
                 dataset_name is not None else
                 "job_config.training.dataset_name is not set")
-    dataset = flame_load_dataset(job_config, dp_degree)
+    dataset, dataset_length = flame_load_dataset(job_config, dp_degree)
 
     logger.info("Building dataloader...")
     if job_config.training.steps is None:
         step_size = job_config.training.batch_size * dp_degree * job_config.training.gradient_accumulation_steps
-        job_config.training.steps = (len(dataset) + step_size - 1) // step_size
+        job_config.training.steps = (dataset_length + step_size - 1) // step_size
         logger.info(
             f"Setting total optimization steps to {job_config.training.steps}")
     dataloader = build_dataloader(
