@@ -140,13 +140,13 @@ class DenseGatedMLP(nn.Module):
         return forward_block(self.down_proj.weight, block_indices, swiglu(gate, y))
 
 
-class SwiGLULinear(nn.Module):
+class DenseSwiGLULinear(nn.Module):
 
     def forward(self, x, y, weight, bias):
         return swiglu_linear(x, y, weight, bias)
 
 
-class SwiGLULinearParallel(ParallelStyle):
+class DenseSwiGLULinearParallel(ParallelStyle):
     def __init__(
         self,
         *,

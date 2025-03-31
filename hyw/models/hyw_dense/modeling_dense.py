@@ -21,7 +21,7 @@ from fla.modules import RMSNorm
 
 # modules with logger
 from hyw.layers.attn import Attention
-from hyw.modules import GatedMLP as DenseMLP
+from hyw.modules import DenseGatedMLP
 from hyw.models.hyw_dense.configuration_dense import DenseConfig
 from hyw.utils import get_hidden_states_logger
 
@@ -63,7 +63,7 @@ class DenseBlock(nn.Module):
             self.mlp_norm = (RMSNorm if config.fuse_norm else nn.RMSNorm)(config.hidden_size, eps=config.norm_eps)
         else:
             self.mlp_norm = None
-        self.mlp = DenseMLP(
+        self.mlp = DenseGatedMLP(
             hidden_size=config.hidden_size,
             hidden_ratio=config.hidden_ratio,
             intermediate_size=config.intermediate_size,
