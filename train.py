@@ -107,7 +107,7 @@ def flame_load_dataset(job_config: JobConfig, dp_degree: int):
         )
         logger.info(f"{dataset}")
 
-        dataset_length = len(dataset)
+        dataset_length = len(dataset) if not job_config.training.streaming else None
         logger.info(
             f"Shuffling the dataset with seed {job_config.training.seed}")
         if not job_config.training.streaming:
@@ -261,7 +261,7 @@ def flame_load_dataset(job_config: JobConfig, dp_degree: int):
             stopping_strategy='all_exhausted',
             seed=job_config.training.seed,
         )
-        dataset_length = len(dataset)
+        dataset_length = len(dataset) if not job_config.training.streaming else None
         logger.info(f"{dataset}")
     return dataset, dataset_length
 
@@ -505,6 +505,7 @@ def main(job_config: JobConfig):
 
     logger.info("Building dataloader...")
     if job_config.training.steps is None:
+        assert dataset_length is not None
         step_size = job_config.training.batch_size * dp_degree * job_config.training.gradient_accumulation_steps
         job_config.training.steps = (dataset_length + step_size - 1) // step_size
         logger.info(
