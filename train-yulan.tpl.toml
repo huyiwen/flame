@@ -45,7 +45,7 @@ decay_ratio = ${DECAY_RATIO}
 decay_type = "sqrt"
 
 [checkpoint]
-enable_checkpoint = true
+enable_checkpoint = false
 folder = "checkpoint"
 interval_type = "steps"
 interval = 256

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.distributed.tensor import (DeviceMesh, DTensor, Placement,
                                       Replicate, Shard, distribute_module)
 from torch.distributed.tensor.parallel import ParallelStyle
@@ -105,7 +106,7 @@ class DenseGatedMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         if self.fuse_swiglu:
-            self.swiglu_linear = SwiGLULinear()
+            self.swiglu_linear = DenseSwiGLULinear()
 
         self.block_size = 32
         self.block_x_num = hidden_size // self.block_size
@@ -121,6 +122,10 @@ class DenseGatedMLP(nn.Module):
 
         self.block_logger = None
 
+    def _maintain_float32_expert_bias(self):
+        if hasattr(self, 'expert_bias') and self.expert_bias is not None:
+            if self.expert_bias.dtype != torch.float32:
+                self.expert_bias.data = self.expert_bias.data.to(torch.float32)
     def forward(
         self,
         x: torch.Tensor,

@@ -103,7 +103,6 @@ def flame_load_dataset(job_config: JobConfig, dp_degree: int):
             streaming=job_config.training.streaming,
             num_proc=job_config.training.num_workers
             if not job_config.training.streaming else None,
-            cache_dir="/cpfs01/user/wenxian.hyw/cache",
         )
         logger.info(f"{dataset}")
 
